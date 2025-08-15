@@ -1,0 +1,9 @@
+services:
+    parallel-fetch:
+        hostname: parallel-fetch-php
+        build: docker/php-fpm
+        container_name: parallel-fetch-php
+        volumes:
+            - ./:/var/www/app
+        expose:
+            - 9000
