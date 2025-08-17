@@ -7,11 +7,13 @@ use GuzzleHttp\Pool;
 use GuzzleHttp\Promise\Coroutine;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\RejectedPromise;
+use Psr\Http\Message\StreamInterface;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 use Monolog\Level;
+use Psr\Http\Message\ResponseInterface;
 
 readonly class DownloadManager
 {
@@ -100,6 +102,7 @@ readonly class DownloadManager
                             'stream' => true,
                         ]);
 
+                        /** @var StreamInterface $body */
                         $body = $response->getBody();
                         $fh = fopen($tmpPath, 'ab');
                         while (!$body->eof()) {
@@ -119,12 +122,23 @@ readonly class DownloadManager
                             default => null,
                         };
 
-                        if ($total !== null) {
-                            // Verify completion
-                            $current = filesize($tmpPath) ?: 0;
-                            if ($current !== $total) {
-                                throw new \RuntimeException("Partial content: {$current}/{$total}");
-                            }
+                        if (!$total) {
+                            $this->logger->error('Cant determine file total size', [
+                                'http_code' => $status,
+                                'attempt' => $attempt,
+                                'url' => $url,
+                                'range' => $headers['Range'] ?? 'full',
+                            ]);
+
+                            return yield new RejectedPromise(
+                                new \RuntimeException('Cant determine total size. Url: ' . $url),
+                            );
+                        }
+
+                        // Verify completion
+                        $current = filesize($tmpPath) ?: 0;
+                        if ($current !== $total) {
+                            throw new \RuntimeException("Partial content. Retry: {$current}/{$total}");
                         }
 
                         $this->filesystem->rename($tmpPath, $finalPath, true);
@@ -134,7 +148,7 @@ readonly class DownloadManager
 
                         return $finalPath; // success
                     } catch (\Throwable $e) {
-                        $delay = $this->calculateDelay($attempt) * 1000;
+                        $delay = $this->calculateDelay($attempt);
                         $attempt++;
                         $this->logger->warning('retrying', [
                             'url' => $url,
@@ -142,7 +156,7 @@ readonly class DownloadManager
                             'delay_ms' => $delay,
                             'error' => $e->getMessage(),
                         ]);
-                        usleep($delay);
+                        usleep($delay * 1000);
                     }
                 }
 
@@ -160,27 +174,21 @@ readonly class DownloadManager
         return basename($path);
     }
 
-    private function fullResponseSize($response): ?int
+    private function fullResponseSize(ResponseInterface $response): ?int
     {
         $len = $response->getHeaderLine('Content-Length');
 
         return $len !== '' ? (int)$len : null;
     }
 
-    private function partialResponseSize($response): ?int
+    private function partialResponseSize(ResponseInterface $response): ?int
     {
         $cr = $response->getHeaderLine('Content-Range');
         if (!$cr) {
             return null; // no Content-Range header
         }
-
-        [$range, $total] = explode('/', $cr, 2);   // "bytes 0-99", "150177558"
-        [, $positions] = explode(' ', $range, 2); // "0-99"
-        [$start, $end] = explode('-', $positions, 2);
-
-        if ((int)$end < (int)$total) {
-            throw new \RuntimeException("Partial content. Retry: {$end}/{$total}");
-        }
+dd($cr);
+        [, $total] = explode('/', $cr, 2);   // "bytes 0-99", "150177558"
 
         return (int)$total;
     }
