@@ -28,7 +28,7 @@ readonly class DownloadManager
         private int $maxDelaysMs,
         private int $baseDelaysMs,
     ) {
-        $this->logger->pushHandler(new StreamHandler($this->dirLog.'/app.log', Level::Debug));
+        $this->logger->pushHandler(new StreamHandler($this->dirLog . '/app.log', Level::Debug));
     }
 
     public function downloadMany(array $urls, callable $progress): void
@@ -75,6 +75,7 @@ readonly class DownloadManager
                         'url' => $url,
                         'file' => $finalPath,
                     ]);
+
                     return yield Create::promiseFor(null);
                 }
 
@@ -118,16 +119,19 @@ readonly class DownloadManager
                             default => null,
                         };
 
-                        // Verify completion
-                        $current = file_exists($tmpPath) ? filesize($tmpPath) : 0;
-                        // Don't throw an exception if the file size is different from the expected size
-                        // This allows downloads to complete even if there are minor discrepancies
-                        // in the reported content length
-                        // Move to completed
+                        if ($total !== null) {
+                            // Verify completion
+                            $current = filesize($tmpPath) ?: 0;
+                            if ($current !== $total) {
+                                throw new \RuntimeException("Partial content: {$current}/{$total}");
+                            }
+                        }
+
                         $this->filesystem->rename($tmpPath, $finalPath, true);
                         $this->logger->info('File completed', [
                             'file' => $finalPath,
                         ]);
+
                         return $finalPath; // success
                     } catch (\Throwable $e) {
                         $delay = $this->calculateDelay($attempt) * 1000;
@@ -136,7 +140,7 @@ readonly class DownloadManager
                             'url' => $url,
                             'attempt' => $attempt,
                             'delay_ms' => $delay,
-                            'error' => $e->getMessage()
+                            'error' => $e->getMessage(),
                         ]);
                         usleep($delay);
                     }
@@ -174,8 +178,10 @@ readonly class DownloadManager
         [, $positions] = explode(' ', $range, 2); // "0-99"
         [$start, $end] = explode('-', $positions, 2);
 
-        // Return the total size instead of the end position
-        // This allows for proper verification of download completion
+        if ((int)$end < (int)$total) {
+            throw new \RuntimeException("Partial content. Retry: {$end}/{$total}");
+        }
+
         return (int)$total;
     }
 
@@ -184,7 +190,7 @@ readonly class DownloadManager
     {
         $exp = min($this->maxDelaysMs, $this->baseDelaysMs * (2 ** ($attempt)));
 
-        $half   = intdiv($exp, 2);
+        $half = intdiv($exp, 2);
         $jitter = random_int(-$half, $half);
 
         return max($this->baseDelaysMs, min($this->maxDelaysMs, $exp + $jitter));
