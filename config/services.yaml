@@ -6,8 +6,11 @@
 parameters:
     dir_tmp: '%kernel.project_dir%/%env(DIR_TMP)%'
     dir_download: '%kernel.project_dir%/%env(DIR_DOWNLOAD)%'
+    dir_log: '%kernel.project_dir%/%env(DIR_LOG)%'
     max_retries: '%env(MAX_RETRIES)%'
     concurrency: '%env(CONCURRENCY)%'
+    max_delays_ms: '%env(MAX_DELAYS_MS)%'
+    base_delays_ms: '%env(BASE_DELAYS_MS)%'
 services:
     # default configuration for services in *this* file
     _defaults:
@@ -38,5 +41,12 @@ services:
         arguments:
             $dirTmp: '%dir_tmp%'
             $dirDownload: '%dir_download%'
+            $dirLog: '%dir_log%'
             $maxRetries: '%max_retries%'
             $concurrency: '%concurrency%'
+            $maxDelaysMs: '%max_delays_ms%'
+            $baseDelaysMs: '%base_delays_ms%'
+
+    Monolog\Logger:
+        arguments:
+            $name: 'app'

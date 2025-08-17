@@ -66,5 +66,11 @@
             "allow-contrib": false,
             "require": "7.3.*"
         }
+    },
+    "require-dev": {
+        "mikey179/vfsstream": "^1.6",
+        "phpunit/phpunit": "^11.5",
+        "symfony/browser-kit": "7.3.*",
+        "symfony/css-selector": "7.3.*"
     }
 }
