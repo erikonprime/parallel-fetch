@@ -125,6 +125,7 @@ readonly class DownloadManager
                         if (!$total) {
                             $this->logger->error('Cant determine file total size', [
                                 'http_code' => $status,
+                                'msg' => $response->getReasonPhrase() ?? 'unknown',
                                 'attempt' => $attempt,
                                 'url' => $url,
                                 'range' => $headers['Range'] ?? 'full',
@@ -187,7 +188,7 @@ readonly class DownloadManager
         if (!$cr) {
             return null; // no Content-Range header
         }
-dd($cr);
+
         [, $total] = explode('/', $cr, 2);   // "bytes 0-99", "150177558"
 
         return (int)$total;
